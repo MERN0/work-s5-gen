@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# sys5 intermediate run artifacts (never committed - see paths.py)
+**/_runs/
+
+# Secrets / local env
+.env
+.env.*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local Claude Code tooling config (per-machine, not project content)
+.claude/settings.local.json
