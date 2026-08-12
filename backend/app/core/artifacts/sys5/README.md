@@ -52,9 +52,40 @@ columns can never desync.
 
 Only the final `sys5_<sheet>_<timestamp>.xlsx` may exist in `output_dir`,
 because `sys5.py`'s fixed "Step 2" block zips *everything* it finds there.
-All intermediate JSON (enriched requirements, run log, run summary) goes to
-this package's own `_runs/<project>_<timestamp>/` directory instead — see
-`paths.py`.
+All intermediate artifacts go to this package's own
+`_runs/<project>_<timestamp>/` directory instead — see `paths.py`:
+
+- `enriched_requirements.json` — every processed requirement plus its
+  attached supporting-doc context, machine-readable.
+- `requirements_context.log` — the same information, human-readable: one
+  block per requirement with its text and exactly which supporting-doc rows
+  were attached to it and why (match score).
+- `run_log.jsonl` / `run_summary.json` — per-test-case outcomes and final
+  totals/errors.
+
+## Logs
+
+Every module logs via `logging.getLogger(__name__)` and never configures
+logging itself — a host app's own logging config decides where these end
+up. Key things to expect at INFO level: which sheet(s)/files were scanned
+and how many rows matched, which requirement is being processed and what
+got fuzzy-matched to it, every agent call (which agent, which
+requirement/aspect) and its pass/fail outcome, and retries on transient LLM
+errors. Run standalone (see below) to see it all on the console via
+`logging_config.configure_logging()`.
+
+## Running standalone without an LLM
+
+`python -m app.core.artifacts.sys5.sys5` runs the whole `generate()` flow
+against a small synthetic requirements file with the LLM client and
+`call_structured` stubbed out — no `OPENAI_API_KEY`, network access, or real
+project input needed. Useful for checking the wiring (config parsing,
+keyword scan, fuzzy matching, graph routing, workbook + intermediate-file
+writing) after a change, not for judging output quality.
+
+For a real run, copy `.env.example` to `.env` and fill in `OPENAI_API_KEY`
+(and `SYS5_LLM_API_BASE` if your gateway differs from the default) — it's
+loaded automatically via `python-dotenv`.
 
 ## Known scope boundaries (said out loud on purpose)
 

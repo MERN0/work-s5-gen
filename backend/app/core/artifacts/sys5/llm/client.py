@@ -5,16 +5,25 @@ should fail immediately and loudly, not after Excel parsing has already run.
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import TypeVar
 
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
 from pydantic import BaseModel
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import before_sleep_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.artifacts.sys5.config import Sys5Config
 from app.core.artifacts.sys5.exceptions import LlmClientError
+
+# Picks up OPENAI_API_KEY / SYS5_LLM_API_BASE from a local .env file (see
+# .env.example) without ever overriding a value already set in the real
+# environment - safe to call unconditionally at import time.
+load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -31,6 +40,7 @@ def build_chat_model(config: Sys5Config) -> ChatOpenAI:
         raise LlmClientError("OPENAI_API_KEY is not set in the environment.")
     api_base = os.environ.get("SYS5_LLM_API_BASE", DEFAULT_API_BASE)
 
+    logger.info("[sys5] Building LLM client: model=%r api_base=%r temperature=%s", config.model, api_base, config.llm_temperature)
     try:
         return ChatOpenAI(
             model=config.model,
@@ -47,6 +57,7 @@ def build_chat_model(config: Sys5Config) -> ChatOpenAI:
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
     retry=retry_if_exception_type(_TRANSIENT_ERRORS),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
 )
 def _invoke_structured(structured_llm, messages: list[tuple[str, str]]):
     return structured_llm.invoke(messages)
@@ -64,6 +75,12 @@ def call_structured(
     graph/nodes.py) are expected to catch whatever escapes and degrade
     gracefully rather than let one bad call crash the whole run.
     """
+    logger.debug(
+        "[sys5] LLM request: output_model=%s method=%s (%d chars of user content)",
+        output_model.__name__, structured_output_method, len(user_content),
+    )
     structured_llm = llm.with_structured_output(output_model, method=structured_output_method)
     messages = [("system", system_prompt), ("user", user_content)]
-    return _invoke_structured(structured_llm, messages)
+    result = _invoke_structured(structured_llm, messages)
+    logger.debug("[sys5] LLM response received for output_model=%s", output_model.__name__)
+    return result

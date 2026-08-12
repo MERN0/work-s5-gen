@@ -23,6 +23,8 @@ irreducible false positive/negative edges (abbreviations, unit suffixes).
 """
 from __future__ import annotations
 
+import logging
+
 from rapidfuzz import fuzz, process
 
 from app.core.artifacts.sys5.config import Sys5Config
@@ -33,6 +35,8 @@ from app.core.artifacts.sys5.models.requirement import (
     SupportingContextItem,
 )
 
+logger = logging.getLogger(__name__)
+
 _MAX_TOKEN_FIELD_LEN = 40
 
 
@@ -42,8 +46,17 @@ def enrich_requirement(
     if not entities:
         return EnrichedRequirement(requirement=requirement, supporting_context=[], allowed_signal_tokens=set())
 
-    combined: dict[SupportingEntity, float] = _tier1_row_matches(requirement, entities, config)
-    for entity, score in _tier2_token_matches(requirement, entities, config).items():
+    tier1 = _tier1_row_matches(requirement, entities, config)
+    tier2 = _tier2_token_matches(requirement, entities, config)
+    logger.debug(
+        "[sys5] Fuzzy match for %s: tier1(row, token_set_ratio>=%d)=%d hit(s), "
+        "tier2(token, partial_ratio>=%d)=%d hit(s).",
+        requirement.req_id, config.fuzzy_match_threshold, len(tier1),
+        config.token_match_threshold, len(tier2),
+    )
+
+    combined: dict[SupportingEntity, float] = dict(tier1)
+    for entity, score in tier2.items():
         combined[entity] = max(combined.get(entity, 0.0), score)
 
     ranked = sorted(combined.items(), key=lambda kv: kv[1], reverse=True)
