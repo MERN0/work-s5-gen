@@ -7,6 +7,9 @@ patterns). Entry point: `sys5.generate(config: dict) -> str` (returns a zip
 path). See `sys5.py` for the two blocks marked "do not change" — they're the
 fixed contract with the caller and must stay exactly as given.
 
+New to this codebase? Read [`HANDOFF.md`](./HANDOFF.md) first — a stage-by-stage
+walkthrough of what runs, why, and how a config dict becomes the final workbook.
+
 ## Pipeline, in one picture
 
 ```
