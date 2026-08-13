@@ -32,6 +32,7 @@ queue item" cycle into a loop.
 | Reading supporting docs (signals/commands/comm matrix/...) | `excel/supporting_docs_loader.py` |
 | Attaching relevant context to a requirement | `matching/fuzzy_context.py` |
 | Agent prompts (one file per agent) | `prompts/` |
+| Automotive-domain prompt add-ons (bcm/adas/telematics/range_polygon/chassis/powertrain) | `prompts/domains.py` |
 | LLM client + retry | `llm/client.py` |
 | The graph itself | `graph/` |
 | Deterministic test-case checks | `validation/rules.py` |
@@ -47,6 +48,23 @@ strings — it emits typed `TestStep` objects (`models/test_case.py`), and
 the numbered text (`1. Test_start`, ..., `<n>. End_of_test`). Both the
 validator and the workbook writer call this same function, so the two output
 columns can never desync.
+
+## Automotive-domain prompts
+
+`Sys5Config.domain` (from the config's `domain` key, set by the caller at
+the start of a run) picks a domain-specific prompt add-on from
+`prompts/domains.py` — currently `bcm`, `adas`, `telematics`,
+`range_polygon`, `chassis`, `powertrain` (plus a few free-text spelling
+aliases; see `_DOMAIN_ALIASES` in that file). `prompts/registry.py::
+resolve_prompt()` is the single choke point every agent call goes through
+(planning, generation, verification, qa), so the matching domain block is
+appended there — to whichever prompt is in play, our default or an
+`agent_chain` override alike. An unrecognized or blank `domain` is a silent
+no-op. The add-ons are deliberately just contextual grounding (what the
+system typically does, what its tests typically hinge on) and never contain
+actual signal/command names, consistent with the "no hallucinated signal"
+rule the base prompts already enforce — real signal names still only ever
+come from the project's own supporting-doc context.
 
 ## What never lands in `output_dir`
 

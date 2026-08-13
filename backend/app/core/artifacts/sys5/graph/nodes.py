@@ -110,7 +110,7 @@ def load_and_prepare(state: PipelineState) -> dict:
 
 
 def _plan_aspects(llm, enriched: EnrichedRequirement, config: Sys5Config) -> list[TestAspect]:
-    prompt = resolve_prompt(config.agent_chain, planning_agent.AGENT_NAME)
+    prompt = resolve_prompt(config.agent_chain, planning_agent.AGENT_NAME, config.domain)
     user_content = _format_requirement_context(enriched)
     logger.info("[sys5] Calling %s for requirement %s", planning_agent.AGENT_NAME, enriched.requirement.req_id)
     try:
@@ -132,7 +132,7 @@ def generate_test_case(state: PipelineState) -> dict:
     item = state["queue"][0]
     enriched = state["enriched_requirements"][item["requirement_id"]]
 
-    prompt = resolve_prompt(config.agent_chain, generation_agent.AGENT_NAME)
+    prompt = resolve_prompt(config.agent_chain, generation_agent.AGENT_NAME, config.domain)
     user_content = _format_generation_context(enriched, item["aspect"])
 
     logger.info(
@@ -221,7 +221,7 @@ def validate_test_case(state: PipelineState) -> dict:
 def _run_semantic_check(state, enriched, item, test_case, issues) -> tuple[bool, str | None]:
     config: Sys5Config = state["config"]
     llm = state["llm"]
-    prompt = resolve_prompt(config.agent_chain, verification_agent.AGENT_NAME)
+    prompt = resolve_prompt(config.agent_chain, verification_agent.AGENT_NAME, config.domain)
     user_content = _format_verification_context(enriched, item["aspect"], test_case, issues)
     logger.info("[sys5] Calling %s for requirement %s, aspect %r", verification_agent.AGENT_NAME, item["requirement_id"], item["aspect"].aspect_id)
     try:
@@ -245,7 +245,7 @@ def correct_test_case(state: PipelineState) -> dict:
     validation = state["current_validation"]
 
     llm = state["llm"]
-    prompt = resolve_prompt(config.agent_chain, qa_agent.AGENT_NAME)
+    prompt = resolve_prompt(config.agent_chain, qa_agent.AGENT_NAME, config.domain)
     user_content = _format_correction_context(enriched, item["aspect"], test_case, validation)
 
     logger.info(
