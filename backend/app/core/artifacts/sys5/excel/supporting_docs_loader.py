@@ -12,10 +12,13 @@ project layout, not just separate files.
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from app.core.artifacts.sys5.config import Sys5Config
 from app.core.artifacts.sys5.excel.raw_grid import RawSheet, find_header_row, load_workbook_sheets, row_to_dict
+
+logger = logging.getLogger(__name__)
 
 _ENTITY_TYPE_HINTS: dict[str, str] = {
     "signal": "signal",
@@ -55,19 +58,30 @@ def load_supporting_sheets(config: Sys5Config) -> list[RawSheet]:
     format profile to locate a project's Test Pattern / Configurable
     Parameters tab by name (see formats/default_profile.py).
     """
+    candidates = _candidate_files(config)
+    logger.info("[sys5] Supporting-doc candidate file(s): %s", [p.name for p in candidates])
     sheets: list[RawSheet] = []
-    for path in _candidate_files(config):
+    for path in candidates:
         try:
-            sheets.extend(load_workbook_sheets(path))
-        except Exception:
+            loaded = load_workbook_sheets(path)
+        except Exception as exc:
+            logger.warning("[sys5] Skipping unreadable supporting file %s: %s", path.name, exc)
             continue  # corrupt/unreadable supporting file: skip, never fatal
+        logger.info("[sys5] %s: loaded %d sheet(s): %s", path.name, len(loaded), [s.name for s in loaded])
+        sheets.extend(loaded)
     return sheets
 
 
 def load_supporting_entities(config: Sys5Config) -> list[SupportingEntity]:
     entities: list[SupportingEntity] = []
     for sheet in load_supporting_sheets(config):
-        entities.extend(_sheet_to_entities(sheet))
+        sheet_entities = _sheet_to_entities(sheet)
+        entity_types = sorted({e.entity_type for e in sheet_entities})
+        logger.info(
+            "[sys5] Sheet %r (%s): indexed %d row(s) as supporting entities (types=%s).",
+            sheet.name, sheet.source_file, len(sheet_entities), entity_types,
+        )
+        entities.extend(sheet_entities)
     return entities
 
 

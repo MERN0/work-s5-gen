@@ -14,6 +14,7 @@ Algorithm, per target sheet:
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
@@ -30,8 +31,9 @@ from app.core.artifacts.sys5.excel.raw_grid import (
 from app.core.artifacts.sys5.exceptions import RequirementsFileError
 from app.core.artifacts.sys5.models.requirement import FeatureMeta, Requirement
 
+logger = logging.getLogger(__name__)
+
 _REQ_TEXT_HEADER_HINTS = ["requirement text", "system requirement", "description", "requirement"]
-_REQ_ID_HEADER_HINTS = ["requirement id", "req id", "id"]
 
 _FEATURE_META_HINTS = {
     "feature_group": ["feature group"],
@@ -62,18 +64,26 @@ def load_requirements(config: Sys5Config) -> list[Requirement]:
         if not sheets:
             raise RequirementsFileError(f"Sheet '{config.req_sheet_name}' not found in {path.name}")
 
+    logger.info("[sys5] Scanning %d sheet(s) of %s for requirement rows: %s", len(sheets), path.name, [s.name for s in sheets])
+
     requirements: list[Requirement] = []
     for sheet in sheets:
         requirements.extend(_extract_requirements_from_sheet(sheet, config))
+    logger.info("[sys5] Extracted %d requirement row(s) total from %s.", len(requirements), path.name)
     return requirements
 
 
 def _extract_requirements_from_sheet(sheet: RawSheet, config: Sys5Config) -> list[Requirement]:
     matched_rows = _scan_for_keyword_rows(sheet, config)
     if not matched_rows:
+        logger.info("[sys5] Sheet %r: no keyword-matched rows.", sheet.name)
         return []
 
-    _, header = find_header_row(sheet, anchor_row=matched_rows[0][0])
+    header_row_index, header = find_header_row(sheet, anchor_row=matched_rows[0][0])
+    logger.info(
+        "[sys5] Sheet %r: %d row(s) matched a sys5 keyword; header row=%s.",
+        sheet.name, len(matched_rows), header_row_index,
+    )
     feature = _extract_feature_meta(sheet)
 
     requirements = []
@@ -81,7 +91,10 @@ def _extract_requirements_from_sheet(sheet: RawSheet, config: Sys5Config) -> lis
         row_values = sheet.rows[row_index - 1]
         cells = row_to_dict(row_values, header)
         requirement_text = _pick_requirement_text(cells, row_values, header)
-        req_id = _pick_req_id(cells, sheet.name, row_index)
+        req_id = _pick_req_id(row_values, sheet.name, row_index)
+        logger.info(
+            "[sys5] Sheet %r row %d: req_id=%r (matched keyword %r)", sheet.name, row_index, req_id, matched_keyword,
+        )
         requirements.append(
             Requirement(
                 req_id=req_id,
@@ -132,10 +145,16 @@ def _pick_requirement_text(cells: dict, row_values: list, header: list[str] | No
     return max(strings, key=len) if strings else ""
 
 
-def _pick_req_id(cells: dict, sheet_name: str, row_index: int) -> str:
-    for key, value in cells.items():
-        if value and any(hint in _normalize(key) for hint in _REQ_ID_HEADER_HINTS):
-            return str(value).strip()
+def _pick_req_id(row_values: list, sheet_name: str, row_index: int) -> str:
+    """The requirement ID always lives in the row's first column - scanning
+    every column's *header* for an "id"-ish hint (the old approach) was
+    unreliable: substrings like "id" also match unrelated headers ("Valid",
+    "Provided", "Guidance", ...), so a header hit earlier in the row than the
+    real ID column could silently steal traceability for the wrong value.
+    """
+    first_cell = row_values[0] if row_values else None
+    if first_cell not in (None, ""):
+        return str(first_cell).strip()
     return f"{sheet_name}-R{row_index}"
 
 
