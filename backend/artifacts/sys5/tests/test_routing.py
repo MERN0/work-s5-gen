@@ -4,13 +4,16 @@ from artifacts.sys5.graph import routing
 from artifacts.sys5.models.test_case import ValidationResult
 
 
-def _config(**overrides) -> Sys5Config:
+def _config(max_validation_attempts=2, max_correction_attempts=1, **overrides) -> Sys5Config:
     defaults = dict(
         output_dir="out",
         input_folder="in",
-        max_validation_attempts=2,
-        max_correction_attempts=1,
-        agent_chain=[AgentStep(index=0, agent_name="qa_agent")],
+        max_validation_attempts=max_validation_attempts,
+        max_correction_attempts=max_correction_attempts,
+        agent_chain=[
+            AgentStep(index=0, agent_name="verification_agent", max_retries=max_validation_attempts),
+            AgentStep(index=1, agent_name="qa_agent", max_retries=max_correction_attempts),
+        ],
     )
     defaults.update(overrides)
     return Sys5Config(**defaults)
@@ -73,6 +76,19 @@ def test_route_after_validate_finalizes_when_validation_budget_exhausted():
         "validation_attempts": 2,
     }
     assert routing.route_after_validate(state) == "finalize_item"
+
+
+def test_route_after_validate_uses_qa_agent_step_max_retries_over_config_default():
+    # The AgentStep's own max_retries wins over Sys5Config.max_correction_attempts
+    # whenever qa_agent is present in agent_chain.
+    config = _config(max_correction_attempts=1, agent_chain=[AgentStep(index=0, agent_name="qa_agent", max_retries=5)])
+    state = {
+        "current_validation": ValidationResult(passed=False, issues=[], attempt=1),
+        "config": config,
+        "correction_attempts": 2,
+        "validation_attempts": 1,
+    }
+    assert routing.route_after_validate(state) == "correct_test_case"
 
 
 def test_route_after_finalize_continues_queue_or_builds_outputs():

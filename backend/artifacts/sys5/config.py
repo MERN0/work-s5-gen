@@ -84,6 +84,17 @@ class Sys5Config(BaseModel):
         """
         return {step.agent_name for step in self.agent_chain}
 
+    def agent_max_retries(self, agent_name: str, default: int) -> int:
+        """The retry/attempt budget for one agent: that agent's own
+        AgentStep.max_retries if it's present in agent_chain, else the given
+        pipeline-wide default (e.g. max_validation_attempts/
+        max_correction_attempts) - see graph/routing.py.
+        """
+        for step in self.agent_chain:
+            if step.agent_name == agent_name:
+                return step.max_retries
+        return default
+
     @classmethod
     def from_raw(cls, config: dict[str, Any]) -> "Sys5Config":
         output_dir = config.get("output_folder_path") or config.get("output_dir", ".")
@@ -109,9 +120,10 @@ class Sys5Config(BaseModel):
                 output_dir=Path(output_dir),
                 input_folder=Path(input_folder) if input_folder else Path("."),
                 uploaded_files=config.get("uploaded_files", []) or [],
-                agent_chain=[
-                    a if isinstance(a, AgentStep) else AgentStep(**a) for a in (config.get("agent_chain") or [])
-                ],
+                # AgentStep.model_validate handles a dict, an AgentStep instance, or
+                # any other object exposing the same attributes (e.g. a caller's own
+                # AgentStep-shaped pydantic model) via from_attributes - see AgentStep.
+                agent_chain=[AgentStep.model_validate(a) for a in (config.get("agent_chain") or [])],
                 req_filename=config.get("req_filename", ""),
                 req_sheet_name=config.get("req_sheet_name", ""),
                 **extra,

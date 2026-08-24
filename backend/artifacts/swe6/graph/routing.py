@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Literal
 
 from artifacts.swe6.models.state import PipelineState
-from artifacts.swe6.prompts import qa_agent
+from artifacts.swe6.prompts import qa_agent, verification_agent
 from artifacts.swe6.prompts.registry import is_agent_selected
 
 
@@ -26,8 +26,13 @@ def route_after_validate(state: PipelineState) -> Literal["finalize_item", "corr
         # qa_agent wasn't chosen for this run - never a correction loop, just finalize as-is.
         return "finalize_item"
 
-    can_correct = state["correction_attempts"] < config.max_correction_attempts
-    can_reattempt = state["validation_attempts"] < config.max_validation_attempts
+    # Each agent's own AgentStep.max_retries (when it's in agent_chain) is the
+    # operative budget; config.max_correction_attempts/max_validation_attempts
+    # is only the fallback for when that agent isn't in the chain at all.
+    max_correction_attempts = config.agent_max_retries(qa_agent.AGENT_NAME, config.max_correction_attempts)
+    max_validation_attempts = config.agent_max_retries(verification_agent.AGENT_NAME, config.max_validation_attempts)
+    can_correct = state["correction_attempts"] < max_correction_attempts
+    can_reattempt = state["validation_attempts"] < max_validation_attempts
     return "correct_test_case" if (can_correct and can_reattempt) else "finalize_item"
 
 

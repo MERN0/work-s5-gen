@@ -17,13 +17,32 @@ class AgentStep(BaseModel):
     ones it wants to customize. `index` is the position of this agent within
     the chain the user picked; process areas that support reordering use it,
     others just use presence/absence of an agent_name.
+
+    `condition_field`/`condition_routes`/`condition_default` are reserved for
+    conditional graph routing (which state field to branch on, and where each
+    value routes to) - not yet interpreted by swe6/sys5's fixed-topology
+    graph (see graph/build.py), just carried through unchanged. `max_retries`
+    is interpreted: it's this agent's own retry/attempt budget, and overrides
+    the process area's pipeline-wide default whenever this agent is present
+    in the chain (see Swe6Config.agent_max_retries()/Sys5Config's twin).
+
+    `model_config`'s `from_attributes=True` lets this be built not just from
+    a dict but from any object exposing the same attribute names - e.g. a
+    caller's own AgentStep-shaped pydantic model - so a foreign-but-compatible
+    agent_chain object still extracts correctly instead of failing validation.
     """
+
+    model_config = {"from_attributes": True}
 
     index: int
     agent_name: str
     agent_description: str = ""
     system_prompt: str = ""
     user_prompt: str = ""
+    condition_field: str | None = None
+    condition_routes: dict[str, str] = Field(default_factory=dict)
+    condition_default: str = "END"
+    max_retries: int = 3
 
 
 class GenerationRequest(BaseModel):
